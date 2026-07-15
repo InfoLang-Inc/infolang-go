@@ -1,0 +1,79 @@
+# GoReleaser configuration for the InfoLang CLI.
+#
+# This wires publishing but is NOT run as part of WP48. A future maintainer
+# triggers a release by pushing a semver tag (e.g. v0.1.0); the release workflow
+# then runs `goreleaser release`, which builds the binaries and pushes an
+# `infolang` formula to the InfoLang-Inc/homebrew-tap repository.
+#
+# Validate locally with: goreleaser check
+version: 2
+
+project_name: infolang
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: infolang
+    main: ./cmd/infolang
+    binary: infolang
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/InfoLang-Inc/infolang-go.Version={{ .Version }}
+
+archives:
+  - id: infolang
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+brews:
+  - name: infolang
+    repository:
+      owner: InfoLang-Inc
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: https://infolang.ai
+    description: InfoLang semantic-memory CLI (recall, investigate, remember).
+    license: Apache-2.0
+    commit_author:
+      name: infolang-release-bot
+      email: release@infolang.ai
+    install: |
+      bin.install "infolang"
+    test: |
+      system "#{bin}/infolang", "version"
+
+release:
+  prerelease: auto
