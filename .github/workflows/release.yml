@@ -1,0 +1,38 @@
+name: release
+
+# Runs only when a semver tag is pushed. WP48 does NOT push a tag; this exists so
+# a future `git tag v0.1.0 && git push --tags` publishes binaries and updates the
+# Homebrew tap automatically.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          # Pinned to a v2 that publishes a Homebrew *formula* (the `brews`
+          # block). Newer v2 deprecates formulas in favor of casks; bump
+          # deliberately and migrate `brews` when that happens.
+          version: "2.5.1"
+          args: release --clean
+        env:
+          # Default token releases to this repo; HOMEBREW_TAP_TOKEN is a PAT with
+          # write access to InfoLang-Inc/homebrew-tap.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

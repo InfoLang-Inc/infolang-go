@@ -1,0 +1,403 @@
+# Canonical public REST contract for il-runtime.
+# SDKs and docs pin a copy at the tag named in IL_RUNTIME_VERSION.
+# Keep this file aligned with crates/il-runtime/src/http/routes.rs and the
+# edge MEMORY_PATH_PREFIXES allowlist in infolang-api.
+openapi: 3.1.0
+info:
+  title: InfoLang Runtime API
+  version: 0.2.0
+  description: >
+    Forge-compatible semantic memory REST API served by il-runtime.
+    Managed edge accepts optional X-InfoLang-Workspace-Id to select an
+    account workspace. Forget is DELETE /v1/memories/{memory_id}; recent
+    memories are GET /v1/memories.
+servers:
+  - url: https://api.infolang.ai
+    description: Managed cloud edge
+  - url: http://127.0.0.1:8766
+    description: Self-hosted runtime
+paths:
+  /v1/health:
+    get:
+      operationId: health
+      summary: Liveness/readiness probe.
+      responses:
+        "200":
+          description: Healthy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthResponse" }
+
+  /v1/recall:
+    post:
+      operationId: recall
+      summary: Semantic recall from a memory bank.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecallRequest" }
+      responses:
+        "200":
+          description: Recalled hits (runtime) / chunks (SDK-normalized).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecallResponse" }
+
+  /v1/remember:
+    post:
+      operationId: remember
+      summary: Store a memory in the caller namespace.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RememberRequest" }
+      responses:
+        "200":
+          description: Stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RememberResponse" }
+
+  /v1/memories:
+    get:
+      operationId: listRecent
+      summary: List recent memories in the caller namespace.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceIdHeader"
+        - name: namespace
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10 }
+        - name: n
+          in: query
+          description: Alias for limit (SDK compatibility).
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Recent memories.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecentResponse" }
+
+  /v1/memories/{memory_id}:
+    delete:
+      operationId: forget
+      summary: Delete a memory by id.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceIdHeader"
+        - name: memory_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted.
+
+  /v1/banks:
+    get:
+      operationId: listBanks
+      summary: List available memory banks.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceIdHeader"
+      responses:
+        "200":
+          description: Banks.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BanksResponse" }
+
+  /v1/encode:
+    post:
+      operationId: encode
+      summary: Encode text to InfoLang vectors (self-hosted / elevated).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string }
+      responses:
+        "200": { description: Encoding payload. }
+
+  /v1/similarity:
+    post:
+      operationId: similarity
+      summary: Compare two texts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text1, text2]
+              properties:
+                text1: { type: string }
+                text2: { type: string }
+      responses:
+        "200": { description: Similarity payload. }
+
+  /v1/context-pack:
+    post:
+      operationId: contextPack
+      summary: Build a token-budgeted context string.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContextPackRequest" }
+      responses:
+        "200":
+          description: Context pack.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContextPackResponse" }
+
+  /v1/repos/{namespace}/ingest:
+    post:
+      operationId: ingestRepo
+      summary: Index a repository into a bank.
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/WorkspaceIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IngestRequest" }
+      responses:
+        "200": { description: Ingest accepted. }
+
+  /v1/repos/{namespace}/status:
+    get:
+      operationId: repoStatus
+      summary: Repo ingest status for a namespace.
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/WorkspaceIdHeader"
+      responses:
+        "200": { description: Status payload. }
+
+  /v1/stats:
+    get:
+      operationId: stats
+      summary: Namespace / store stats.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceIdHeader"
+      responses:
+        "200": { description: Stats payload. }
+
+  /v1/execute:
+    post:
+      operationId: execute
+      summary: Run a batch of operations.
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecuteRequest" }
+      responses:
+        "200":
+          description: Batch results.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteResponse" }
+
+components:
+  parameters:
+    WorkspaceIdHeader:
+      name: X-InfoLang-Workspace-Id
+      in: header
+      required: false
+      description: >
+        Select which account workspace this request targets. Required when an
+        API key's allowlist covers more than one workspace (or when using a
+        JWT and the user belongs to multiple workspaces).
+      schema:
+        type: string
+        format: uuid
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status: { type: string }
+        model_loaded: { type: boolean }
+        engine_ok: { type: boolean }
+        dev_mode: { type: boolean }
+    Chunk:
+      type: object
+      properties:
+        i: { type: string, description: Memory id }
+        s: { type: number, description: Similarity score }
+        t: { type: string, description: Chunk text }
+        g: { type: string, description: Tags }
+      required: [i, t]
+    RecallHit:
+      type: object
+      properties:
+        id: { type: string }
+        text: { type: string }
+        tags: { type: string }
+        similarity: { type: number }
+    RecallRequest:
+      type: object
+      properties:
+        query: { type: string }
+        namespace: { type: string }
+        top_k: { type: integer }
+        filters: { type: object, additionalProperties: true }
+        verbose: { type: boolean }
+      required: [query]
+    RecallResponse:
+      type: object
+      properties:
+        namespace: { type: string }
+        count: { type: integer }
+        hits:
+          type: array
+          items: { $ref: "#/components/schemas/RecallHit" }
+        chunks:
+          type: array
+          items: { $ref: "#/components/schemas/Chunk" }
+          description: SDK-normalized alias of hits
+        savings: { $ref: "#/components/schemas/Savings" }
+    Savings:
+      type: object
+      description: >
+        Token-savings telemetry. returned_tokens measures the serialized JSON
+        payload actually delivered; baseline_tokens is measured from the full
+        stored source text behind each above-threshold chunk (see
+        baseline_method); chunks below similarity_threshold earn no credit.
+      properties:
+        baseline_tokens: { type: integer }
+        returned_tokens: { type: integer }
+        tokens_saved: { type: integer }
+        baseline_method:
+          type: string
+          enum: [measured_source_text, mixed, returned_only]
+        similarity_threshold: { type: number }
+        weak_chunks: { type: integer }
+        last_model:
+          type: [string, "null"]
+          description: >
+            Calling model as declared via the optional x-infolang-model request
+            header. Null when the caller did not declare one — clients must not
+            substitute a default price silently.
+    RememberRequest:
+      type: object
+      properties:
+        text: { type: string }
+        namespace: { type: string }
+        source: { type: string }
+        tags: { type: string }
+      required: [text]
+    RememberResponse:
+      type: object
+      properties:
+        id: { type: string }
+        namespace: { type: string }
+        stored: { type: boolean }
+        total_memories: { type: integer }
+    Bank:
+      type: object
+      properties:
+        namespace: { type: string }
+        total_memories: { type: integer }
+        count:
+          type: integer
+          description: SDK alias for total_memories
+        parquet_size_mb: { type: number }
+        sample_sources:
+          type: array
+          items: { type: string }
+      required: [namespace]
+    BanksResponse:
+      type: object
+      properties:
+        banks:
+          type: array
+          items: { $ref: "#/components/schemas/Bank" }
+    RecentResponse:
+      type: object
+      properties:
+        memories:
+          type: array
+          items: { type: object, additionalProperties: true }
+    ContextPackRequest:
+      type: object
+      properties:
+        query: { type: string }
+        namespace: { type: string }
+        max_tokens: { type: integer }
+        repo_root: { type: string }
+      required: [query]
+    ContextPackResponse:
+      type: object
+      properties:
+        pack: { type: string }
+        tokens_estimated: { type: integer }
+        namespace: { type: string }
+    IngestRequest:
+      type: object
+      properties:
+        dir: { type: string }
+        git: { type: string }
+        repo_root:
+          type: string
+          description: SDK alias mapped to dir by clients
+        ref: { type: string }
+        chunk_size: { type: integer }
+        overlap: { type: integer }
+        batch_size: { type: integer }
+        dry_run: { type: boolean }
+    ExecuteRequest:
+      type: object
+      properties:
+        operations:
+          type: array
+          items:
+            type: object
+            properties:
+              op: { type: string }
+              args: { type: object, additionalProperties: true }
+              select: { type: array, items: { type: string } }
+            required: [op]
+      required: [operations]
+    ExecuteOperationResult:
+      type: object
+      properties:
+        op: { type: string }
+        ok: { type: boolean }
+        payload: { type: object, additionalProperties: true }
+        error: { type: string }
+        status: { type: integer }
+    ExecuteResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ExecuteOperationResult" }
