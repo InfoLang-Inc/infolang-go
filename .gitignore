@@ -1,0 +1,11 @@
+# Binaries
+/infolang
+/dist/
+*.exe
+*.test
+*.out
+
+# Go workspace / tooling
+go.work
+go.work.sum
+coverage.txt
